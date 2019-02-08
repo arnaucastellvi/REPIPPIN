@@ -1,0 +1,730 @@
+<style>
+ #pantalla th,#pantalla td{
+  //border:1px solid black;
+  padding:4px;
+ }
+ #pantalla table {
+  border-collapse: collapse;
+ }
+ #pantalla input{
+  border-bottom-style:solid;
+  border-bottom-color:black;
+  border-bottom-width:1px;
+  height:1.2em;
+  padding:0px;
+  margin:0px;
+ }
+ #pantalla button {
+   margin-bottom:1em;
+ }
+</style>
+<div id="pantalla" style="position:fixed;background-color: white; height: 100%; left: 0px; position: fixed; top: 0px; width: 100%;">
+<b>REPIPPIN!</b> Simulador <i>Von Neumann</i> en un JavaScript poc academic, compatible amb PIPPIN, però ràpid.
+<br>
+<button onclick="run()">Run</button>
+ Valors inicials:
+ PC<input id="IDpc" size="2" value="0" />
+ W<input id="IDw" size="2" value="0" />
+ X<input id="IDx" size="2" value="0" />
+ Y<input id="IDy" size="2" value="0" />
+ Z<input id="IDz" size="2" value="0" />
+ T1<input id="IDt1" size="2" value="0" />
+ T2<input id="IDt2" size="2" value="0" />
+ T3<input id="IDt3" size="2" value="0" />
+ T4<input id="IDt4" size="2" value="0" />
+<!-- Limit <input id="IDl" size="2" value="255" /> -->
+ <button onclick="resetIni()" style="margin-top:4px;">Reset ini</button>
+ <br />
+  <div id="IDcodi" style="float: left; height: 16em; overflow: auto; padding: 0px; width: 10em; background-color:silver;">
+  </div>
+  <div id="IDinfo" style="height: 16em; overflow: auto; padding: 0px; margin:2px; background-color:lightyellow;">
+  </div>
+  <div style="clear: both;"> </div>
+  <button onclick="resetCodi()">Reset codi</button>
+  <div><pre>
+<u>Instrucció</u>    <u>Significat</u>
+LOD R / LOD #X Carregar el valor del registre R (o el valor sencer X) a l'Acumulador. 
+STO R          Emmagatzemar el valor de l'Acumulador al registre R. 
+ADD R / ADD #X Suma el contingut de l'Acumulador amb el contingut del registre R (o el valor sencer X) i sobreescriu el Acumulador. 
+SUB R / SUB #X Resta el contingut de l'Acumulador amb el contingut del registre R (o el valor sencer X) i sobreescriu el Acumulador. 
+NOT            Si el contingut de l'Acumulador és 0, el posa a 1. En cas contrari posa un 0. 
+JMP P          Salta a la posició de memòria P. 
+JMZ P          Si el valor de l'Acumulador és 0, salta a la posició de memòria P. En cas contrari, executa la següent instrucció. 
+CPZ R          Si el contingut del registre R és zero, posa l'Acumulador a 1. En cas contrari posa un 0. 
+CPL R          Si el contingut del registre R és menor que zero, posa l'Acumulador a 1. En cas contrari posa un 0. 
+HLT            Aturar l'execució del simulador.    
+   </pre></div>
+   <div style="font-size: .5em;">(Arnau Castellví 07-02-2019)</div>
+</div>
+<script>
+ pantalla.style.position="fixed";
+ pantalla.style.zIndex=-1>>>1;
+ pantalla.style.overflow="auto";
+   var lineDiv=document.createElement("div");
+  lineDiv.style.backgroundColor="silver";
+  lineDiv.style.height="1.3em";
+  lineDiv.innerHTML="<b>Pos. Codi</b>";
+  IDcodi.appendChild(lineDiv);
+ for (var i=0; i<127; i+=2){
+  var lineDiv=document.createElement("div");
+  lineDiv.style.overflow="hidden";
+  lineDiv.style.margin="0px";
+  lineDiv.style.height="1.3em";
+  var lineNum=document.createElement("div");
+  lineNum.innerHTML=i;
+  lineNum.style.width="2em";
+  lineNum.style.float="left";
+  lineNum.style.padding="0px";
+  lineNum.style.margin="0px";
+  lineDiv.appendChild(lineNum);
+  var line=document.createElement("input");
+  line.id="codeLine"+i;
+  line.n=i;
+  line.onkeypress=function(e){
+    if (e.keyCode == 13) {
+     var p=document.getElementById("codeLine"+(this.n+2)); 
+     if (this.n<126) p.focus();
+     IDcodi.scrollTop=(p.offsetTop-p.clientHeight*4)<0?0:p.offsetTop-p.clientHeight*4;
+    }
+  };
+  line.onkeydown=function(e){
+    if (e.keyCode == 38 && this.n>=2) {
+     var p=document.getElementById("codeLine"+(this.n-2)); 
+     p.focus();
+     IDcodi.scrollTop=(p.offsetTop-p.clientHeight*4)<0?0:p.offsetTop-p.clientHeight*4;
+    }
+	else if (e.keyCode == 40 && this.n<=124) {
+     var p=document.getElementById("codeLine"+(this.n+2)); 
+     p.focus();
+     IDcodi.scrollTop=(p.offsetTop-p.clientHeight*4)<0?0:p.offsetTop-p.clientHeight*4;
+    }
+  };
+  line.onclick=function(){
+   this.focus();
+   IDcodi.scrollTop=(this.offsetTop-this.clientHeight*4)<0?0:this.offsetTop-this.clientHeight*4;
+  };
+  line.size=7;
+  lineDiv.appendChild(line);
+  IDcodi.appendChild(lineDiv);
+  }
+ for (var i=0; i<10; i++){
+  var lineDiv=document.createElement("div");
+  lineDiv.style.backgroundColor="silver";
+  lineDiv.style.height="1.3em";
+  IDcodi.appendChild(lineDiv);
+ }
+ var codi="";
+ /* // Codi inicial si escau.
+ codi=[
+  "lodx","stow","jmz#20","sub#1","jmz#20","stox","addw","stow","lodx","jmp#6","hlt"
+ ];
+ */
+ 
+ var W,X,Y,Z,T1,T2,T3,T4;
+ var ACC,PC,IR,ALU;
+ var PCA,valor,error,errorText,contador;
+
+ var RAM=[];
+ for (let i=0; i<64; i++) {
+  if (i<codi.length)
+   RAM.push(codi[i]);
+  else RAM.push("NOP");
+  RAM.push("");
+  document.getElementById("codeLine"+i*2).value=RAM[i*2];
+ }
+
+ var outTXT="";
+ var out=function(){
+  outTXT+="<tr>"+
+   "<td>"+contador+")"+"</td>"+
+   "<td>"+PCA+"</td>"+
+   "<td>"+IR+"</td>"+
+   "<td>"+ACC+"</td>"+
+   "<td>"+W+"</td>"+
+   "<td>"+X+"</td>"+
+   "<td>"+Y+"</td>"+
+   "<td>"+Z+"</td>"+
+   "<td>"+T1+"</td>"+
+   "<td>"+T2+"</td>"+
+   "<td>"+T3+"</td>"+
+   "<td>"+T4+"</td>"+
+   "<td>"+PC+"</td>"+
+   "<td>"+ALU+"</td>"+
+   "<td>"+errorText+"</td>"+
+   "</tr>";
+ }
+ function resetCodi(){
+  RAM=[];
+  for (let i=0; i<128; i+=2) {
+   RAM.push("NOP");
+   RAM.push("");
+   document.getElementById("codeLine"+i).value=RAM[i];
+  }
+ }
+ 
+ function resetIni(){
+  IDpc.value=0;
+  IDw.value=0;
+  IDx.value=0;
+  IDy.value=0;
+  IDz.value=0;
+  IDt1.value=0;
+  IDt2.value=0;
+  IDt3.value=0;
+  IDt4.value=0;
+  IDinfo.innerHTML="";
+ }
+ function run(){
+  RAM=[];
+  log=[];
+  for (let i=0; i<127; i+=2) {
+   if (document.getElementById("codeLine"+i).value.trim()!="")
+    RAM.push(document.getElementById("codeLine"+i).value);
+   else RAM.push("NOP");
+   RAM.push("");
+  }
+  W=X=Y=Z=T1=T2=T3=T4=ACC=PC=PCA=0;
+  IR=ALU="";
+  //inicialitza
+  var temp=Number(IDpc.value);
+  if (temp<128 && temp>=0) PCA=PC=temp;
+  else IDpc.value=0
+  temp=Number(IDw.value);
+  if (temp<128 && temp>=-128) W=temp; 
+  else IDw.value=0
+  temp=Number(IDx.value);
+  if (temp<128 && temp>=-128) X=temp;  
+  else IDx.value=0
+  temp=Number(IDy.value);
+  if (temp<128 && temp>=-128) Y=temp;  
+  else IDy.value=0
+  temp=Number(IDz.value);
+  if (temp<128 && temp>=-128) Z=temp;  
+  else IDz.value=0
+  temp=Number(IDt1.value);
+  if (temp<128 && temp>=-128) T1=temp;  
+  else IDt1.value=0
+  temp=Number(IDt2.value);
+  if (temp<128 && temp>=-128) T2=temp;  
+  else IDt2.value=0
+  temp=Number(IDt3.value);
+  if (temp<128 && temp>=-128) T3=temp;  
+  else IDt3.value=0
+  temp=Number(IDt4.value);
+  if (temp<128 && temp>=-128) T4=temp; 
+  else IDt4.value=0
+  /*
+  temp=Number(IDl.value);
+  if (temp<128) IDl.value=128;
+  */
+  
+  error=false;
+  errorText='';
+  contador=0;
+  outTXT='<table style="border-collapse: collapse;"><thead style="visibility:hidden;"><tr>'+
+   "<th>Num</th><th>Dir</th><th>IR</th><th>ACC</th><th>W</th><th>X</th><th>Y</th><th>Z</th><th>T1</th><th>T2</th><th>T3</th><th>T4</th><th>PC</th><th>ALU</th><th>ERROR</th>"+
+   "</tr></thead><tbody>";
+  while (PCA<RAM.length && PCA<=126 && IR!="HLT" && !error){
+   IR=ALU="";
+   var instruccio=RAM[PCA].replace(/[^0-9a-zA-Z#]/gi, '').replace(/#(.*)/gi, '#').toUpperCase();
+   instruccio=instruccio.replace(/JMP([0-9]+)/gi, 'JMP#');
+   instruccio=instruccio.replace(/JMZ([0-9]+)/gi, 'JMZ#');
+   switch (instruccio){
+    case "NOP":
+     IR="NOP";
+     PC=PCA+2;
+     break;
+    case "LOD#":
+     valor=Number(RAM[PCA].split("#")[1].replace(/[^0-9\-]/gi, ''));
+     if (isNaN(valor) || valor<-128 || valor > 127) {
+      errorText="ERROR OOR";
+      error=true;
+      break;
+     }
+     IR="LOD #"+valor;
+     ACC=valor;
+     ALU="="+valor
+     PC=PCA+2;
+     break;
+    case "LODW":
+     IR="LOD W";
+     ALU="="+W;
+     ACC=W;
+     PC=PCA+2;
+     break;
+    case "LODX":
+     IR="LOD X";
+     ALU="="+X;
+     ACC=X;
+     PC=PCA+2;
+     break;
+    case "LODY":
+     IR="LOD Y";
+     ALU="="+Y;
+     ACC=Y;
+     PC=PCA+2;
+     break;
+    case "LODZ":
+     IR="LOD Z";
+     ALU="="+Z;
+     ACC=Z;
+     PC=PCA+2;
+     break;
+    case "LODT1":
+     IR="LOD T1";
+     ALU="="+T1;
+     ACC=T1;
+     PC=PCA+2;
+     break;
+    case "LODT2":
+     IR="LOD T2";
+     ALU="="+T2;
+     ACC=T2;
+     PC=PCA+2;
+     break;
+    case "LODT3":
+     IR="LOD T3";
+     ALU="="+T3;
+     ACC=T3;
+     PC=PCA+2;
+     break;
+    case "LODT4":
+     IR="LOD T4";
+     ALU="="+T4;
+     ACC=T4;
+     PC=PCA+2;
+     break;
+    case "STOW":
+     IR="STO W";
+     W=ACC;
+     PC=PCA+2;
+     break;
+    case "STOX":
+     IR="STO X";
+     X=ACC;
+     PC=PCA+2;
+     break;
+    case "STOY":
+     IR="STO Y";
+     Y=ACC;
+     PC=PCA+2;
+     break;
+    case "STOZ":
+     IR="STO Z";
+     Z=ACC;
+     PC=PCA+2;
+     break;
+    case "STOT1":
+     IR="STO T1";
+     T1=ACC;
+     PC=PCA+2;
+     break;
+    case "STOT2":
+     IR="STO T2";
+     T2=ACC;
+     PC=PCA+2;
+     break;
+    case "STOT3":
+     IR="STO T3";
+     T3=ACC;
+     PC=PCA+2;
+     break;
+    case "STOT4":
+     IR="STO T4";
+     T4=ACC;
+     PC=PCA+2;
+     break;
+    case "HLT":
+     IR="HLT";
+     break;
+    case "ADD#":
+     valor=Number(RAM[PCA].split("#")[1].replace(/[^0-9\-]/gi, ''));
+     if (isNaN(valor) || valor<-128 || valor > 127) {
+      errorText="Fora de rang";
+      error=true;
+      break;
+     }
+     IR="ADD #"+valor;
+     if (!( (ACC+valor)>127 || (ACC+valor)<-128) ){
+      ACC+=valor;
+      ALU="+"+valor;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "ADDW":
+     IR="ADD W";
+     if (!( (ACC+W)>127 || (ACC+W)<-128) ){
+      ACC+=W;
+      ALU="+"+W;
+       PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "ADDX":
+     IR="ADD X";
+     if (!( (ACC+X)>127 || (ACC+X)<-128) ){
+      ACC+=X;
+      ALU="+"+X;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "ADDY":
+     IR="ADD Y";
+     if (!( (ACC+Y)>127 || (ACC+Y)<-128) ){
+      ACC+=Y;
+      ALU="+"+Y;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "ADDZ":
+     IR="ADD Z";
+     if (!( (ACC+Z)>127 || (ACC+Z)<-128) ){
+      ACC+=Z;
+      ALU="+"+Z;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "ADDT1":
+     IR="ADD T1";
+     if (!( (ACC+T1)>127 || (ACC+T1)<-128) ){
+      ACC+=T1;
+      ALU="+"+T1;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "ADDT2":
+     IR="ADD T2";
+     if (!( (ACC+T2)>127 || (ACC+T2)<-128) ){
+      ACC+=T2;
+      ALU="+"+T2;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "ADDT3":
+     IR="ADD T3";
+     if (!( (ACC+T3)>127 || (ACC+T3)<-128) ){
+      ACC+=T3;
+      ALU="+"+T3;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "ADDT4":
+     IR="ADD T4";
+     if (!( (ACC+T4)>127 || (ACC+T4)<-128) ){
+      ACC+=T4;
+      ALU="+"+T4;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "SUB#":
+     valor=Number(RAM[PCA].split("#")[1].replace(/[^0-9\-]/gi, ''));
+     if (isNaN(valor) || valor<-128 || valor > 127) {
+      errorText="Fora de rang";
+      error=true;
+      break;
+     }
+     IR="SUB #"+valor;
+     if (!((ACC-valor)>127 || (ACC-valor)<-128)){
+      ACC-=valor;
+      ALU="-"+valor;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "SUBW":
+     IR="SUB W";
+     if (!( (ACC-W)>127 || (ACC-W)<-128) ){
+      ACC-=W;
+      ALU="-"+W;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "SUBX":
+     IR="SUB X";
+     if (!( (ACC-X)>127 || (ACC-X)<-128) ){
+      ACC-=X;
+      ALU="-"+X;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "SUBY":
+     IR="SUB Y";
+     if (!( (ACC-Y)>127 || (ACC-Y)<-128) ){
+      ACC-=Y;
+      ALU="-"+Y;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "SUBZ":
+     IR="SUB Z";
+     if (!( (ACC-Z)>127 || (ACC-Z)<-128) ){
+      ACC-=Z;
+      ALU="-"+Z;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "SUBT1":
+     IR="SUB T1";
+     if (!( (ACC-T1)>127 || (ACC-T1)<-128) ){
+      ACC-=T1;
+      ALU="-"+T1;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "SUBT2":
+     IR="SUB T2";
+     if (!( (ACC-T2)>127 || (ACC-T2)<-128) ){
+      ACC-=T2;
+      ALU="-"+T2;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "SUBT3":
+     IR="SUB T3";
+     if (!( (ACC-T3)>127 || (ACC-T3)<-128) ){
+      ACC-=T3;
+      ALU="-"+T3;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "SUBT4":
+     IR="SUB T4";
+     if (!( (ACC-T4)>127 || (ACC-T4)<-128) ){
+      ACC-=T4;
+      ALU="-"+T4;
+      PC=PCA+2;
+     } else {
+      error=true;
+      errorText="Desbordament"
+     }
+     break;
+    case "NOT":
+     IR="NOT";
+     ALU="!"+ACC;
+     if (ACC==0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     break;
+    case "JMP#":
+     if (RAM[PCA].split("#").length>1)
+      valor=Number(RAM[PCA].split("#")[1].replace(/[^0-9\-]/gi, ''));
+     else valor=Number(RAM[PCA].split("JMP")[0].replace(/[^0-9\-]/gi, ''));
+     if (isNaN(valor) || valor<0 || valor > 126) {
+      errorText="Fora de rang";
+      error=true;
+      break;
+     }
+     IR="JMP #"+valor;
+     PC=valor&~1;
+     break;
+    case "JMZ#":
+     if (RAM[PCA].split("#").length>1)
+      valor=Number(RAM[PCA].split("#")[1].replace(/[^0-9\-]/gi, ''));
+     else valor=Number(RAM[PCA].split("JMZ")[0].replace(/[^0-9\-]/gi, ''));
+     if (isNaN(valor) || valor<0 || valor > 126) {
+      errorText="Fora de rang";
+      error=true;
+      break;
+     }
+     IR="JMZ #"+valor;
+     if (ACC==0) PC=valor&~1;
+     else PC+=2;
+     break;
+    case "CPZW":
+     if(W==0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPZ W";
+     ALU="W==0";
+     break;
+    case "CPZX":
+     if(X==0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPZ X";
+     ALU="X==0";
+     break;
+    case "CPZY":
+     if(Y==0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPZ Y";
+     ALU="Y==0";
+     break;
+    case "CPZZ":
+     if(Z==0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPZ Z";
+     ALU="Z==0";
+     break;
+    case "CPZT1":
+     if(T1==0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPZ T1";
+     ALU="T1==0";
+     break;
+    case "CPZT2":
+     if(T2==0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPZ T2";
+     ALU="T2==0";
+     break;
+    case "CPZT3":
+     if(T3==0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPZ T3";
+     ALU="T3==0";
+     break;
+    case "CPZT4":
+     if(T4==0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPZ T4";
+     ALU="T4==0";
+     break;
+    case "CPLW":
+     if(W<0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPL W";
+     ALU="W<0";
+     break;
+    case "CPLX":
+     if(X<0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPL X";
+     ALU="X<0";
+     break;
+    case "CPLY":
+     if(Y<0) ACC=1;
+     else ACC=0;
+	 PC=PCA+2;
+     IR="CPL Y";
+     ALU="Y<0";
+     break;
+    case "CPLZ":
+     if(Z<0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPL Z";
+     ALU="Z<0";
+     break;
+    case "CPLT1":
+     if(T1<0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPL T1";
+     ALU="T1<0";
+     break;
+    case "CPLT2":
+     if(T2<0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPL T2";
+     ALU="T2<0";
+     break;
+    case "CPLT3":
+     if(T3<0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPL T3";
+     ALU="T3<0";
+     break;
+    case "CPLT4":
+     if(T4<0) ACC=1;
+     else ACC=0;
+     PC=PCA+2;
+     IR="CPL T4";
+     ALU="T4<0";
+     break;
+
+    default:
+     errorText="Error d'instrucció";
+     error=true;
+   }
+   /**/
+   var l="P"+PCA+"I'"+IR+"'A"+ACC+"W"+W+"X"+X+"Y"+Y+"Z"+Z+"T1"+T1+"T2"+T2+"T3"+T3+"T4"+T4+"PC"+PC;
+   if (log.indexOf(l)==-1) log.push(l);
+   else {
+	error=true;
+    errorText="Bucle infinit"
+   }
+   contador++;
+   /**/
+   /*
+   if (contador>Number(IDl.value)) {
+    error=true;
+    errorText="Limit d'execucion"
+   }
+   */
+   out();
+   PCA=PC;
+  }
+  outTXT+="</tbody></TABLE>";
+  IDinfo.innerHTML=outTXT;
+  var info=document.getElementsByTagName("table")[0].cloneNode(true);
+  info.getElementsByTagName("tbody")[0].style.visibility="hidden";
+  info.getElementsByTagName("thead")[0].style.visibility="visible";
+  info.getElementsByTagName("thead")[0].style.backgroundColor="lightyellow";
+  info.style.position="absolute";
+  IDinfo.insertBefore(info, IDinfo.firstChild);
+
+ };
+ var log=[];
+
+
+</script> 
