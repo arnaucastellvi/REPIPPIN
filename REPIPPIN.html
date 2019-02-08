@@ -1,10 +1,6 @@
 <style>
  #pantalla th,#pantalla td{
-  //border:1px solid black;
   padding:4px;
- }
- #pantalla table {
-  border-collapse: collapse;
  }
  #pantalla input{
   border-bottom-style:solid;
@@ -32,7 +28,6 @@
  T2<input id="IDt2" size="2" value="0" />
  T3<input id="IDt3" size="2" value="0" />
  T4<input id="IDt4" size="2" value="0" />
-<!-- Limit <input id="IDl" size="2" value="255" /> -->
  <button onclick="resetIni()" style="margin-top:4px;">Reset ini</button>
  <br />
   <div id="IDcodi" style="float: left; height: 16em; overflow: auto; padding: 0px; width: 10em; background-color:silver;">
@@ -213,11 +208,7 @@ HLT            Aturar l'execució del simulador.
   temp=Number(IDt4.value);
   if (temp<128 && temp>=-128) T4=temp; 
   else IDt4.value=0
-  /*
-  temp=Number(IDl.value);
-  if (temp<128) IDl.value=128;
-  */
-  
+ 
   error=false;
   errorText='';
   contador=0;
@@ -704,13 +695,6 @@ HLT            Aturar l'execució del simulador.
     errorText="Bucle infinit"
    }
    contador++;
-   /**/
-   /*
-   if (contador>Number(IDl.value)) {
-    error=true;
-    errorText="Limit d'execucion"
-   }
-   */
    out();
    PCA=PC;
   }
